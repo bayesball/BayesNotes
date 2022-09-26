@@ -1,0 +1,168 @@
+---
+title: "Chapter 9 Hierarchical Modeling"
+author: "Jim Albert"
+date: "2022-09-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+```
+
+```{r}
+library(LearnBayes)
+library(readr)
+```
+
+## Estimating OGT Success Rates
+
+Read in the OGT writing dataset.
+
+```{r}
+ogt <- read_csv("../data/writing_OGT.csv")
+```
+
+Create a data matrix, y in first column and n in second column.
+
+```{r}
+d <- cbind(ogt$Advanced, ogt$N)
+```
+
+Using the `betabinexch()` function containing the log of the posterior of (logit $\eta$, $\log K$), find normal approximation to posterior.
+
+```{r}
+fit <- laplace(betabinexch, c(-3, 4), d)
+```
+Output posterior mode.
+
+```{r}
+fit$mode
+```
+
+By transforming back, estimates at $\eta$ and $\log K$.
+
+```{r}
+(eta <- exp(fit$mode[1]) / (1 + exp(fit$mode[1])))
+(K <- exp(fit$mode[2]))
+```
+
+Instead implement a random walk Metropolis algorithm to simulate 10,000 draws of posterior.
+
+```{r}
+sim_draws <- rwmetrop(betabinexch, 
+                      proposal = list(var = fit$var,
+                                      scale = 2),
+                      start = c(-3, 4),
+                      m = 10000, d)
+```
+
+Acceptance rate of algorithm?
+
+```{r}
+sim_draws$accept
+```
+Using simulated draws, find summaries of posterior of logit $\eta$ and $\log K$.
+
+Quantiles of logit $\eta$:
+
+```{r}
+quantile(sim_draws$par[, 1],
+         c(0.025, 0.25, 0.50, 0.75, 0.95))
+```
+Quantiles of $\log K$:
+
+```{r}
+quantile(sim_draws$par[, 2],
+         c(0.025, 0.25, 0.50, 0.75, 0.95))
+```
+Estimates at $p_i$.  I write a short function to compute  posterior summaries for a single $p_i$.  I simulate values $p_i$ by first simulating draws of $(\eta, K)$ and then simulating values of $p_i$ from the beta posterior.
+
+```{r}
+summaries_pi <- function(j){
+  invlogit <- function(y){
+    exp(y) / (1 + exp(y))
+  }
+  eta <- invlogit(sim_draws$par[, 1])
+  K <- exp(sim_draws$par[, 2])
+  y <- d[, 1]
+  n <- d[, 2]
+  pj <- rbeta(10000, y[j] + K * eta, 
+                     n[j] - y[j] + K * (1 - eta))
+  c(mean(pj), sd(pj), quantile(pj, c(.05, .95)))
+}
+(post_moments <- t(sapply(1:9, summaries_pi)))
+```
+
+## Normal/Normal Model - Efron and Morris data
+
+```{r}
+efronmorris <- read_csv("../data/efron_morris.csv")
+```
+Transform proportions -- reexpressed values are approximately normal($\theta_i, 0.11$)
+
+```{r}
+logit <- function(y){log(y) - log(1 - y)}
+invlogit <- function(y){exp(y) / (1 + exp(y))}
+y <- logit(efronmorris$r / efronmorris$n)
+d <- cbind(y,  0.11)
+```
+
+Log posterior of mean $\mu$ and $\log \tau$ available in the function `normnormexch()`.
+
+Simulate draws of posterior of $(\mu, \log \tau)$ using random walk Metropolis.
+
+First do normal approximation to get reasonable estimate at posterior variance.
+
+```{r}
+fit <- laplace(normnormexch, c(0, 0),
+               d)
+```
+
+Then use this posterior variance estimate in the proposal distribution for the random walk Metropolis.
+
+```{r}
+sim_draws <- rwmetrop(normnormexch, 
+                      proposal = list(var = fit$var,
+                                      scale = 2),
+                      start = c(-1, -1.5),
+                      m = 10000, d)
+```
+
+Here the acceptance rate is about 34% which is reasonable.
+
+Get estimates at $\mu$ and $\tau$ from the simulated draws.
+
+```{r}
+(mu <- mean(sim_draws$par[, 1]))
+(tau <- mean(exp(sim_draws$par[, 2])))
+```
+
+Find estimate at shrinkage
+$$
+F(\tau^2) = \frac{1/\tau^2}{1/\tau^2 + 1/\sigma^2}
+$$
+
+```{r}
+(Ft <- (1 / tau ^ 2) / (1 / tau ^ 2 + 1 / 0.11))
+```
+Interesting -- this shrinkage is larger than the value 0.68 quoted in the notes.
+
+Estimates at the $\theta_i$ are found.  Then these estimates are transformed back to get estimates at the $p_i$.
+ 
+Create a table like Table 9.4.
+
+```{r}
+theta_est <- y * (1 - Ft) + mu * Ft
+p_est <- invlogit(theta_est)
+cbind(efronmorris$r / efronmorris$n,
+      y, theta_est, p_est)
+```
+
+Here is a graph of the posterior of $\tau$. (It seems that Figure 9.2 is really a graph of the posterior of $\tau$, not $\tau ^ 2$.)
+
+```{r}
+plot(density(exp(sim_draws$par[, 2])))
+```
+
