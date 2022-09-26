@@ -1,0 +1,154 @@
+---
+title: "Chapter 7 - Bayesian Computation 1"
+author: "Jim Albert"
+date: "2022-09-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+```
+
+```{r}
+library(LearnBayes)
+library(readr)
+```
+
+## 7.2 Normal Approximation
+
+### A proportion problem
+
+Suppose we observe $y = 3$ successes in a sample of size $n = 15$.
+
+Exact posterior of $p$ with a uniform prior is beta($y + 1$, $n - y + 1$).
+
+Use the `laplace()` function to get the normal approximation (mean and variance).  Show the exact beta posterior and compare with the normal approximation.
+
+```{r}
+n <- 15
+y <- 3
+logpost <- function(p, y, n){
+  y * log(p) + (n - y) * log(1 - p)
+}
+fit <- laplace(logpost, y / n, y, n)
+curve(dbeta(x, y + 1, n - y + 1), 0, 1,
+      col = "red")
+curve(dnorm(x, fit$mode, sqrt(fit$var)), 
+      add = TRUE)
+```
+
+### Improving the accuracy of the approximation
+
+Can improve the accuracy of the normal approximation by transforming $p$ to $\theta$ = logit($p$).  Repeat this graph by comparing approximate and exact posterior densities of $\theta$.
+
+```{r}
+n <- 15
+y <- 3
+logpost2 <- function(theta, y, n){
+  p <- exp(theta) / (1 + exp(theta))
+  (y + 1) * log(p) + (n - y + 1) * log(1 - p)
+}
+fit2 <- laplace(logpost2, -2, y, n)
+curve((exp(x) / (1 + exp(x))) ^ (y + 1) *
+        (1 - exp(x) / (1 + exp(x))) ^ (n - y + 1) /
+        beta(y + 1, n - y + 1), 
+        -6, 1,
+      col = "red", ylab = "Density")
+curve(dnorm(x, fit2$mode, sqrt(fit2$var)), 
+      add = TRUE)
+```
+
+## Normal Approximation for Multivariate Posterior Distributions
+
+Illustration of the normal approximation for the posterior of $(\mu, \Sigma)$.
+
+The data is the variable `time` in the `marathontimes` datafile in the `LearnBayes` package.
+
+```{r}
+mycontour(normchi2post,  c(225, 330, 10, 9000),
+          marathontimes$time, 
+          col="red", xlab="MU", ylab="V")
+n <- length(marathontimes$time)
+mu.est <- mean(marathontimes$time)
+var.est <- sum((marathontimes$time - mu.est) ^ 2) / 
+  (n + 2)
+Sigma <- diag(c(var.est / n, 2 * var.est ^ 2 / (n + 2)))
+log.dmnorm <- function(x, pars){
+  dmnorm(x, pars$mean, pars$varcov, log = TRUE)
+}
+pars <- list(mean = c(mu.est, var.est), varcov=Sigma)
+mycontour(log.dmnorm,
+          c(225, 330, 10, 9000),
+          pars, add=TRUE, lty=2)
+```
+
+## Modeling with Cauchy Errors
+
+Modeling using Cauchy sampling and a noninformative prior.
+
+Add an outlier to the marathon running times:
+
+```{r}
+time2 <- c(marathontimes$time, 600)
+```
+
+Assuming the usual normal sampling distribution, the following simulates 10000 draws from the marginal posterior of the mean $\mu$.
+
+```{r}
+normsim_MU <- function(d, m){
+  S <-  sum((d - mean(d)) ^ 2)
+  xbar <-  mean(d)
+  n <- length(d)
+  SIGMA2 <- S / rchisq(m, n - 1)
+  rnorm(m, mean = xbar, 
+                 sd = sqrt(SIGMA2) / sqrt(n))
+}
+sim_MU <- normsim_MU(time2, 10000)
+```
+
+One approximates the Cauchy sampling posterior by use of the normal approximation.  The following first plots a density estimate of the normal sampling posterior simulated draws.  Then the Cauchy sampling posterior is overlaid.  This shows that the posterior is very sensitive to the choice of sampling density.
+
+
+```{r}
+cfit <- laplace(cauchyerrorpost, c(0, 0), time2)
+plot(density(sim_MU),
+     xlim=c(200,610),
+     ylim=c(0,.04),
+     xlab="MU", main="", lwd=3)
+curve(dnorm(x, cfit$mode[1], sqrt(cfit$var[1,1])),
+      add=TRUE, lwd=3)
+text(350, 0.015,"Normal")
+text(320, 0.03, "Cauchy")
+points(time2, 0 * time2, pch=19, cex=1.5)
+```
+
+### A non-normal posterior
+
+I load in some data that is clearly bimodal.
+
+```{r}
+d2 <- read_csv("../data/non_normal.csv")
+```
+
+The function `cauchyerrorpost()` contains the definition of the log posterior density of ($\mu, \log \sigma$) for the Cauchy sampling posterior.
+
+The `mycontour()` function constructs a contour plot of the posterior of ($\mu, \log \sigma$).
+
+```{r}
+mycontour(cauchyerrorpost, c(-10, 50, -1, 4),
+          d2$Observation,
+          xlab = "MU",
+          ylab = "LOG SIGMA")
+```
+
+I use the `simcontour()` function to simulate from the grid above.  Then I construct a density plot of the simulated draws of $\mu$ from this Cauchy sampling posterior.
+
+```{r}
+out <- simcontour(cauchyerrorpost, c(-10, 50, -1, 4),
+          d2$Observation, 10000)
+plot(density(out$x),
+     xlab = "MU")
+```
+
