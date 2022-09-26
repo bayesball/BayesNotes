@@ -1,0 +1,91 @@
+---
+title: "Chapter 8 MCMC"
+author: "Jim Albert"
+date: "2022-09-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+```
+
+## Comparing Two Poisson Means
+
+```{r}
+library(LearnBayes)
+library(readr)
+```
+
+
+Program the exact log posterior of ($\theta, \gamma$):
+
+```{r}
+two_poisson <- function(param, dp){
+  theta <- param[1]
+  gamma <- param[2]
+  dp$sa * log(theta) - dp$na * theta +
+    dp$sb * log(theta * gamma) - 
+    dp$nb * theta * gamma +
+    (dp$a0 - 1) * log(theta) - dp$b0 * theta +
+    (dp$ag - 1) * log(gamma) - dp$bg * gamma
+}
+```
+
+Read in the data.  The list `dp` contains all of the summary stats from the data and the values of the prior parameters.
+
+```{r}
+web_counts <- read_csv("../data/website_counts.csv")
+d_weekend <- web_counts$Count[web_counts$Type 
+                              == "Weekend"]
+d_weekday <- web_counts$Count[web_counts$Type 
+                              == "Weekday"]
+dp <- list(na = length(d_weekend),
+             sa = sum(d_weekend),
+             nb = length(d_weekday),
+             sb = sum(d_weekday),
+             ag = 1, a0 = 1, bg = 1, b0 = 1)
+```
+
+
+Use the `mycontour()` function to plot contours of the log posterior density of ($\theta, \gamma$).
+
+```{r}
+mycontour(two_poisson, c(9.5, 18, 1, 2.5), dp,
+          xlab = "THETA", ylab = "GAMMA")
+```
+
+Write a function to implement Gibbs sampling.  The inputs are the starting value of $\theta$, the number of cycles `m` and the list containing the data and prior parameters.
+
+```{r}
+mygibbs <- function(theta0, m, dp){
+  theta <- theta0
+  output <- matrix(0, m, 2)
+  for(j in 1:m){
+    gamma <- rgamma(1, shape = dp$ag + dp$sb,
+                       rate = dp$bg + dp$nb * theta)
+    theta <- rgamma(1, shape = dp$a0 + dp$sa + dp$sb, 
+                       rate = dp$b0 + 
+                              dp$na + dp$nb * gamma)
+    output[j, ] <- c(theta, gamma)
+  }
+  output
+}
+```
+
+Run the Gibbs sampler for 1000 cycles starting at $\theta = 12$.
+
+```{r}
+sim_pars <- mygibbs(12, 1000, dp)
+```
+
+Redraw the contour plot of the log posterior density and display the simulated draws on top.
+
+```{r}
+mycontour(two_poisson, c(9.5, 18, 1, 2.5), dp,
+          xlab = "THETA", ylab = "GAMMA")
+points(sim_pars)
+```
+
+
