@@ -1,0 +1,171 @@
+---
+title: "Chapter 10 Model Selection"
+author: "Jim Albert"
+date: "2022-09-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+```
+
+```{r}
+library(LearnBayes)
+library(readr)
+```
+
+## Introduction to Bayesian Testing
+
+Input values of $\theta_0$, $\theta_1$ and associated prior probabilities on these values.
+```{r}
+mean_h <- 100
+mean_a <- 130
+ph <- 0.95
+pa <- 0.05
+```
+
+Prior odds:
+
+```{r}
+(prior_odds <- ph / pa)
+```
+
+Input values of $\sigma^2$ and observation $y$.
+
+```{r}
+y <- 120
+sigma2 <- 100
+```
+
+Compute Bayes factor, posterior odds, and posterior probability of $\theta_0$.
+
+```{r}
+(BF_ha <- dnorm(y, mean_h, sqrt(sigma2)) /
+  dnorm(y, mean_a, sqrt(sigma2)))
+(odds_ha <- prior_odds * BF_ha)
+(post_h <- odds_ha / (odds_ha + 1))
+```
+## Testing for a Normal Mean
+
+### One-sided hypothesis
+
+- Data $y$ is Normal($\theta, \sigma^2$) where $\sigma = 10$.
+- Testing $\theta \le 100$ against $\theta > 100$.
+- Prior is N(100, 225)
+- Observe $y = 120$
+
+Use function `mnormt.onesided()` from `LearnBayes` package.
+
+```{r}
+mnormt.onesided(100,
+                c(100, 15),
+                c(120, 1, 10))
+```
+
+### Two-sided hypothesis
+
+- Data $y$ is Normal($\theta, \sigma^2$) where $\sigma = 10$.
+- Testing $\theta = 100$ against $\theta \neq 100$.
+- Prior places probability 0.5 on null hypothesis.
+- Prior is N(100, $\tau^2$) if null is not true.
+- Observe $y = 120$
+
+Use function `mnorm.twosided()` from `LearnBayes` package.
+
+Here we input a vector of possible values of $\tau$.  Output are values of the Bayes factor in support of the null and the corresponding posterior probabilities of the null.
+
+```{r}
+mnormt.twosided(100,
+                0.5,
+                c(1, 2, 4, 8, 15, 30, 60, 600),
+                c(120, 1, 10))
+```
+
+## Comparing Models by Bayes Factors
+
+### Comparing Two Priors for Poisson Sampling
+
+Model $M_1$ has that $y's$ are iid Poisson($\lambda$) and $\lambda \sim$ Gamma(40, 2).
+
+Model $M_2$ has that $y's$ are iid Poisson($\lambda$) and $\lambda \sim$ Gamma(20, 2).
+
+Observe data (weekday web site counts):
+
+```{r}
+d <- read_csv("../data/website_counts.csv")
+(y <- d$Count[d$Type == "Weekday"])
+```
+Write function to compute log marginal density.
+
+```{r}
+log_f <- function(y, a, b){
+  s <- sum(y)
+  n <- length(y)
+  lgamma(a + s) - lgamma(a) - 
+    sum(log(factorial(y))) +
+    a * log(b) - (a + s) * log(b + n)
+}
+```
+
+Evaluate the log marginal density for the two models.
+
+```{r}
+(log_f1 <- log_f(y, 40, 2))
+(log_f2 <- log_f(y, 20, 2))
+```
+
+log of Bayes factor and Bayes factor:
+
+```{r}
+(log_B12 <- log_f1 - log_f2)
+(B_12 <- exp(log_B12))
+```
+
+### Using the Laplace Method
+
+Write a function to compute the log posterior for Poisson sampling and normal priors placed on $\lambda_1$ and $\lambda_2$.
+
+```{r}
+log_post <- function(theta, y1, y2, mu1, tau1,
+                     mu2, tau2){
+  theta1 <- theta[1]
+  theta2 <- theta[2]
+  lambda1 <- exp((theta1 + theta2) / 2)
+  lambda2 <- exp((theta2 - theta1) / 2)
+  log_prior <- dnorm(theta1, mu1, tau1, log = TRUE) +
+    dnorm(theta2, mu2, tau2, log = TRUE)
+  log_like <- sum(dpois(y1, lambda1, log = TRUE)) +
+    sum(dpois(y2, lambda2, log = TRUE))
+  log_prior + log_like
+}
+```
+
+Read in the data.
+
+```{r}
+d <- read_csv("../data/website_counts.csv")
+y1 <- d$Count[d$Type == "Weekend"]
+y2 <- d$Count[d$Type == "Weekday"]
+```
+
+Using the `laplace()` function, compute the log marginal density for each of the two models.
+
+```{r}
+(log_M1 <- laplace(log_post, c(0, 0), y1, y2, 
+                   0, 0.5, 5, 5)$int)
+```
+
+```{r}
+(log_M2 <- laplace(log_post, c(0, 0), y1, y2, 
+                   0, 0.05, 5, 5)$int)
+```
+
+Compute the log Bayes factor and the Bayes factor.
+
+```{r}
+(log_B12 <- log_M1 - log_M2)
+(B12 <- exp(log_B12))
+```
+
