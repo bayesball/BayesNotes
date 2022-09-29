@@ -27,6 +27,7 @@ Exact posterior of $p$ with a uniform prior is beta($y + 1$, $n - y + 1$).
 Use the `laplace()` function to get the normal approximation (mean and variance).  Show the exact beta posterior and compare with the normal approximation.
 
 ```{r}
+library(LearnBayes)
 n <- 15
 y <- 3
 logpost <- function(p, y, n){
@@ -34,7 +35,8 @@ logpost <- function(p, y, n){
 }
 fit <- laplace(logpost, y / n, y, n)
 curve(dbeta(x, y + 1, n - y + 1), 0, 1,
-      col = "red")
+      col = "red", ylab = "Density",
+      xlab = "p")
 curve(dnorm(x, fit$mode, sqrt(fit$var)), 
       add = TRUE)
 ```
@@ -55,7 +57,8 @@ curve((exp(x) / (1 + exp(x))) ^ (y + 1) *
         (1 - exp(x) / (1 + exp(x))) ^ (n - y + 1) /
         beta(y + 1, n - y + 1), 
         -6, 1,
-      col = "red", ylab = "Density")
+      col = "red", ylab = "Density",
+      xlab = "logit p")
 curve(dnorm(x, fit2$mode, sqrt(fit2$var)), 
       add = TRUE)
 ```
@@ -137,8 +140,12 @@ The function `cauchyerrorpost()` contains the definition of the log posterior de
 The `mycontour()` function constructs a contour plot of the posterior of ($\mu, \log \sigma$).
 
 ```{r}
+ndata <- c(0.1, -0.9, -0.1, -2.1,  1.4, -0.2,
+           0.5, -1.7,  1.5, -0.6, 40.5, 39.8,
+           40.6, 39.5, 38.7, 39.1, 40.9, 40.6,
+           39.8, 39.8)
 mycontour(cauchyerrorpost, c(-10, 50, -1, 4),
-          d2$Observation,
+          ndata,
           xlab = "MU",
           ylab = "LOG SIGMA")
 ```

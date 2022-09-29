@@ -36,15 +36,14 @@ two_poisson <- function(param, dp){
 Read in the data.  The list `dp` contains all of the summary stats from the data and the values of the prior parameters.
 
 ```{r}
-web_counts <- read_csv("../data/website_counts.csv")
-d_weekend <- web_counts$Count[web_counts$Type 
-                              == "Weekend"]
-d_weekday <- web_counts$Count[web_counts$Type 
-                              == "Weekday"]
-dp <- list(na = length(d_weekend),
-             sa = sum(d_weekend),
-             nb = length(d_weekday),
-             sb = sum(d_weekday),
+weekend <- c(7, 12, 11, 12, 12, 17, 17, 18, 20, 17)
+weekday <- c(20, 30, 22, 20, 20, 17, 21, 26,
+             22, 30, 36, 15, 30, 27, 22, 23,
+             18, 24, 28, 23, 12)
+dp <- list(na = length(weekend),
+             sa = sum(weekend),
+             nb = length(weekday),
+             sb = sum(weekday),
              ag = 1, a0 = 1, bg = 1, b0 = 1)
 ```
 

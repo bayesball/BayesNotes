@@ -169,3 +169,82 @@ Compute the log Bayes factor and the Bayes factor.
 (B12 <- exp(log_B12))
 ```
 
+### Comparing the Geometric and Poisson Distributions
+
+```{r}
+y <- c(0, 1, 2, 3, 8)
+```
+
+
+```{r}
+compute.bf <- function(T, y){
+  n <- length(y)
+  s <- sum(y)
+  f1 <- (1 / T) * 
+    (1 - pbeta(1 / (T + 1), n - 1,s + 1)) * 
+    beta(n - 1, s + 1)
+  f2 <- (1 / T) / prod(gamma(y + 1)) * 
+    pgamma(T, shape = s + 1, rate = n) * 
+    gamma(s + 1) / n ^ (s + 1)
+  f1 / f2
+}
+```
+
+```{r}
+curve(compute.bf(x, y), from = 2, to = 40,
+      xlab = "T", ylab = "Bayes Factor")
+```
+
+```{r}
+gibbs_MS <- function(prior, y, m){
+  s <- sum(y)
+  n <- length(y)
+  # initial estimate
+  mu <- mean(y)
+  # storage for Gibbs variates
+  sim_pars <- matrix(0, m, 2)
+  for(j in 1:m){
+    log.M1 <- sum(dgeom(y, 1 / (1 + mu), log=TRUE)) +
+      log(prior[1])
+    log.M2  <- sum(dpois(y, mu, log=TRUE)) + 
+      log(prior[2])
+    prob <- exp(log.M1) / (exp(log.M1) + exp(log.M2))
+    M <- ifelse(runif(1) < prob, 1, 2)
+    if(M == 2){
+      mu <- rgamma(1, shape = s + 1, rate = n) 
+    } else {
+      p <- rbeta(1, n - 1, s + 1)
+      mu <- (1 - p) / p
+    }
+    sim_pars[j, ] <- c(M, mu)
+  }
+  sim_pars
+}
+```
+
+```{r}
+prior <- c(.1,.9)
+y <- c(0, 1, 2, 3, 8)
+S <- gibbs_MS(prior, y, 100000)
+model.freq <- table(S[, 1])
+post.odds <- model.freq["1"] / model.freq["2"]
+BF <- post.odds / (prior[1] / prior[2])
+BF
+```
+
+```{r}
+y <- c(0, 1, 2, 3, 8)
+s <- sum(y)
+n <- length(y)
+curve(dgamma(x, s + 1, n), 0, 8,
+      xlab = "mu", ylab = "Density")
+curve(dbeta(1 / (1 + x), n - 1, s + 1) / (1 + x) ^ 2,
+      add = TRUE, col = "red")
+mix_post <- function(x){
+  p <- 0.1 * BF / (0.1 * BF + 0.9)
+  p * dgamma(x, s + 1, n) + (1 - p) * 
+    dbeta(1 / (1 + x), n - 1, s + 1) / (1 + x) ^ 2
+}
+curve(mix_post(x), add = TRUE, col = "blue")
+```
+
